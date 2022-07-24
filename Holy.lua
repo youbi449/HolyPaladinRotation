@@ -19,6 +19,13 @@ local HL = {
     LightOfTheMartyr = 183998,
     LightOfDawn = 85222,
     BlessingOfSacrifice = 199448,
+    AurasMastery = 31821,
+    DivineProtection = 498,
+    AurasDevotion = 465,
+    Longanimite = 25771,
+    Longanimite2 = 465,
+    DivineShield = 642,
+    BlessingOfProtection = 1022,
     -- Talents
     LightsHammer = 114158,
     HolyAvenger = 105809,
@@ -109,6 +116,38 @@ function checkIfGroupMemberHaveBeaconOfLight()
     return beaconIsLaunched
 
 end
+
+function targetIsMe()
+    local targetName = UnitName('target')
+    local selfName = UnitName('player')
+    if targetName == selfName then
+        return true
+    else
+        return false
+    end
+end
+function correctHealingSpell(spell, minPercent, unit)
+    local cooldown = fd.cooldown;
+    local selfHealth = UnitHealth('player');
+    local selfHealthMax = UnitHealthMax('player');
+    local selfHealthPercent = (selfHealth / selfHealthMax) * 100;
+    local health = UnitHealth('target');
+    local healthMax = UnitHealthMax('target');
+    local healthPercent = (health / healthMax) * 100;
+    if IsSpellKnown(spell) and not UnitIsDead(unit) and cooldown[spell].ready then
+        if unit == 'player' then
+            if selfHealthPercent <= minPercent then
+                return true
+            end
+        elseif unit == 'target' then
+            if healthPercent <= minPercent then
+                return true
+            end
+        end
+    else
+        return false
+    end
+end
 function Paladin:Holy()
     fd = MaxDps.FrameData;
     covenantId = fd.covenant.covenantId;
@@ -133,10 +172,17 @@ function Paladin:Holy()
     holyPower = UnitPower('player', HolyPower);
     fd.holyPower = holyPower;
 
+    if correctHealingSpell(HL.AurasMastery, 40, 'player') and Buff(HL.AurasDevotion, 'player') then
+        return HL.AurasMastery
+    end
+    if correctHealingSpell(HL.DivineProtection, 40, 'player') then
+        return HL.DivineProtection
+    end
+
     if AoeHeal(70, 3) and holyPower >= 3 then
         return HL.LightOfDawn
     end
-    if UnitCanAttack('target', 'player') or not UnitExists('target') then
+    if UnitCanAttack('target', 'player') or not UnitExists('target') or targetIsMe() then
         return Paladin:selfHeal()
     else
         return Paladin:TargetHeal()
@@ -145,51 +191,72 @@ function Paladin:Holy()
 end
 
 function Paladin:selfHeal()
-    
-    if holyPower >= 3 and selfHealthPercent <= 50 then
-        return HL.WordOfGlory
+
+    if selfHealthPercent <= 20 and not Buff(HL.Longanimite, 'player')  then
+        return HL.DivineShield
     end
-    if healthPercent <= 55 then
-        return HL.FlashLight
-    end
-    if cooldown[HL.BestowFaith].ready and talents[HL.BestowFaith] and selfHealthPercent <= 65 then
-        return HL.BestowFaith
-    end
-    if selfHealthPercent <= 70 then
-        return HL.HolyLight
-    end
-    if cooldown[HL.HolyShock].ready and selfHealthPercent < 80 then
-        return HL.HolyShock
+    if correctHealingSpell(HL.BlessingOfProtection, 40, 'player') and not Buff(HL.Longanimite, 'player') and UnitGroupRolesAssigned('player') ~= 'TANK' then
+        return HL.BlessingOfProtection
     end
 
+    if holyPower >= 3 and correctHealingSpell(HL.WordOfGlory, 80, 'player') then
+        return HL.WordOfGlory
+    end
+    if cooldown[HL.HolyShock].ready and correctHealingSpell(HL.HolyShock, 80, 'player') then
+        return HL.HolyShock
+    end
+    if correctHealingSpell(HL.FlashLight, 55, 'player') then
+        return HL.FlashLight
+    end
+    if talents[HL.BestowFaith] and correctHealingSpell(HL.BestowFaith, 65, 'player') then
+        return HL.BestowFaith
+    end
+    if correctHealingSpell(HL.HolyLight, 85, 'player') then
+        return HL.HolyLight
+    end
+
+    return
 end
 
 function Paladin:TargetHeal()
     
-    if not checkIfGroupMemberHaveBeaconOfLight() and IsInGroup() then
+    if not checkIfGroupMemberHaveBeaconOfLight() and IsInGroup() and
+        correctHealingSpell(HL.BeaconOfLight, 100, 'player') then
         return HL.BeaconOfLight
     end
-    if cooldown[HL.BlessingOfSacrifice].ready and healthPercent <= 45 then
-        return HL.BlessingOfSacrifice
-    end
-    if holyPower >= 3 and healthPercent <= 50 then
-        return HL.WordOfGlory
+
+    if correctHealingSpell(HL.BlessingOfProtection, 40, 'target') and not Buff(HL.Longanimite, 'target') and UnitGroupRolesAssigned('target') ~= 'TANK' then
+        return HL.BlessingOfProtection
     end
 
-    if currentSpeed > 0 and healthPercent <= 55 then
-        return
+    if correctHealingSpell(HL.BlessingOfSacrifice, 45, 'target') then
+        return HL.BlessingOfSacrifice
     end
-    if healthPercent <= 55 then
-        return HL.FlashLight
+    if holyPower >= 3 and correctHealingSpell(HL.WordOfGlory, 80, 'target') then
+        return HL.WordOfGlory
     end
-    if cooldown[HL.BestowFaith].ready and talents[HL.BestowFaith] and healthPercent <= 65 then
-        return HL.BestowFaith
-    end
-    if healthPercent <= 70 then
-        return HL.HolyLight
-    end
-    if cooldown[HL.HolyShock].ready and healthPercent < 80 then
+    if correctHealingSpell(HL.HolyShock, 85, 'target') then
         return HL.HolyShock
     end
+    if currentSpeed > 0 and correctHealingSpell(HL.LightOfTheMartyr, 55, 'target') then
+        return HL.LightOfTheMartyr
+    end
+    if correctHealingSpell(HL.FlashLight, 55, 'target') then
+        return HL.FlashLight
+    end
+    if talents[HL.BestowFaith] and correctHealingSpell(HL.BestowFaith, 65, 'target') then
+        return HL.BestowFaith
+    end
+    if correctHealingSpell(HL.HolyLight, 85, 'target') then
+        return HL.HolyLight
+    end
+    return
+end
+
+function Paladin:SelfDefense()
+
+end
+
+function Paladin:AoeHeal()
 
 end
